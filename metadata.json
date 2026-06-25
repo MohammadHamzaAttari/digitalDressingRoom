@@ -1,0 +1,6 @@
+{
+  "name": "Digital Dressing Room",
+  "description": "3D virtual try-on dressing room with smart fitting, local body dimensions, and custom 3D avatar morphing.",
+  "requestFramePermissions": ["android.permission.CAMERA"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
