@@ -1,8 +1,5 @@
 package com.example.ui.viewport
 
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.graphics.Color as AndroidColor
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTransformGestures
@@ -33,95 +30,6 @@ import com.example.data.UserProfile
 import kotlin.math.max
 import kotlin.math.cos
 import kotlin.math.sin
-import kotlin.math.abs
-import kotlin.math.roundToInt
-import kotlin.math.hypot
-import kotlin.math.atan2
-import kotlin.math.PI
-import kotlin.math.pow
-import kotlin.math.sqrt
-import kotlin.math.log
-import kotlin.math.tan
-import kotlin.math.acos
-import kotlin.math.asin
-
-// Skin tone extraction and adaptation functions for digital dressing room
-
-// Camera2 setup for skin tone detection
-private const val TAG = "Camera2SkinDetector"
-private const val IMAGE_WIDTH = 640
-private const val IMAGE_HEIGHT = 480
-
-// Face skin tone extraction and adaptation for digital dressing room
-fun extractFaceSkinTone(): FaceSkinParameters {
-    // Extract dominant skin tone from camera preview
-    // This uses pixel analysis to detect the most common skin tone
-    // Critical for achieving perfect garment-skin matching
-    return FaceSkinParameters(
-        toneHex = "#D4AF37", // Rich golden skin tone base
-        undertone = "warm",
-        luminosity = 85f, // 0-100 range
-        saturation = 0.6f
-    )
-}
-
-fun adaptGarmentColor(baseColor: Int, faceSkinTone: FaceSkinParameters): Int {
-    // Advanced color adaptation algorithm for perfect matching
-    // Takes into account skin undertones, luminosity, and saturation
-    // Produces harmonized colors that enhance skin tone naturally
-    val red = (baseColor shr 16) and 0xFF
-    val green = (baseColor shr 8) and 0xFF
-    val blue = baseColor and 0xFF
-
-    // Modify based on skin undertone for perfect harmony
-    val hueShift = when (faceSkinTone.undertone) {
-        "warm" -> 10f // Additional warmth for warm undertones
-        "cool" -> -10f // Coolness for cool undertones
-        else -> 0f // Neutral unchanged
-    }
-
-    val alphaFactor = if (faceSkinTone.luminosity > 80f) 0.9f else 1.0f
-
-    // Create adapted color that complements skin tone
-    val adjustedRed = ((red * alphaFactor + 255 * (1 - alphaFactor)) * 1.2f).toInt().coerceIn(0, 255)
-    val adjustedGreen = ((green * alphaFactor + 220 * (1 - alphaFactor)) * 1.1f).toInt().coerceIn(0, 255)
-    val adjustedBlue = ((blue * alphaFactor + 180 * (1 - alphaFactor)) * 0.95f).toInt().coerceIn(0, 255)
-
-    return AndroidColor.rgb(adjustedRed, adjustedGreen, adjustedBlue)
-}
-
-fun interpolateBodyColor(baseColor: Int, garmentType: String, faceSkinTone: FaceSkinParameters): Int {
-    // Smooth transition between base color and skin tone components
-    // Perfect for creating garment overlays that match skin naturally
-    val baseRed = (baseColor shr 16) and 0xFF
-    val baseGreen = (baseColor shr 8) and 0xFF
-    val baseBlue = baseColor and 0xFF
-
-    // Dynamic depth adjustment based on face skin tone detection
-    val depthFactor = when (garmentType.lowercase()) {
-        "jacket", "t-shirt", "shirt" -> 0.15f * faceSkinTone.depth
-        "jeans", "trousers", "pants" -> 0.2f * faceSkinTone.depth
-        "dress" -> 0.25f * faceSkinTone.depth
-        else -> 0.1f * faceSkinTone.depth
-    }
-
-    // Component mixing for realistic skin-tone blending
-    val mixFactor = faceSkinTone.luminosity / 100f
-
-    val adjustedRed = (baseRed * (1 - depthFactor) + 235 * depthFactor).toInt().coerceIn(0, 255)
-    val adjustedGreen = (baseGreen * (1 - depthFactor) + 225 * depthFactor).toInt().coerceIn(0, 255)
-    val adjustedBlue = (baseBlue * (1 - depthFactor) + 220 * depthFactor).toInt().coerceIn(0, 255)
-
-    return AndroidColor.rgb(adjustedRed, adjustedGreen, adjustedBlue)
-}
-
-// Data class for face skin tone parameters
-data class FaceSkinParameters(
-    val toneHex: String, // Primary skin tone in hex
-    val undertone: String, // "warm", "cool", or "neutral"
-    val luminosity: Float, // 0-100 brightness
-    val saturation: Float // 0.0-1.0 saturation level
-)
 
 @Composable
 fun DressingRoomViewport(
@@ -141,17 +49,24 @@ fun DressingRoomViewport(
     var showBody by remember { mutableStateOf(true) }
     var showGarment by remember { mutableStateOf(true) }
 
-    // Parse garment color and extract skin tone adaptations
+    // Parse color or fallback
     val primaryColorInt = try {
         android.graphics.Color.parseColor(garmentColorHex)
     } catch (e: Exception) {
-        0xFF805AD5.toInt()
+        0xFF805AD5.toInt() // beautiful fashion purple
     }
 
-    // Extract face skin tone from camera for proper color adaptation
-    val extractedSkinTone = extractFaceSkinTone()
-    val bodyColorAdjusted = interpolateBodyColor(primaryColorInt, garmentType, extractedSkinTone)
-    val adaptedGarmentColor = adaptGarmentColor(primaryColorInt, extractedSkinTone)
+    val fitHex = when (displayMode) {
+        "Heatmap Fit" -> {
+            // Heatmap color code: green is excellent fit, red is tight, blue is loose
+            when (fitStyle) {
+                "Slim" -> 0xFFE53E3E.toInt() // red (snug/tight)
+                "Oversized" -> 0xFF3182CE.toInt() // blue (roomy/loose)
+                else -> 0xFF38A169.toInt() // green (perfect fit ratio)
+            }
+        }
+        else -> primaryColorInt
+    }
 
     val lightSourceDir = Vector3D(0.5f, -0.6f, -0.8f) // directional studio light source
 
@@ -159,7 +74,7 @@ fun DressingRoomViewport(
     val allPolygons = remember(profile, garmentType, fitHex, showBody, showGarment, displayMode) {
         val list = mutableListOf<Polygon3D>()
         if (showBody) {
-            list.addAll(AvatarGenerator.generateAvatarMesh(profile, bodyColorAdjusted))
+            list.addAll(AvatarGenerator.generateAvatarMesh(profile))
         }
         if (showGarment) {
             list.addAll(AvatarGenerator.generateGarmentMesh(profile, garmentType, fitHex))
