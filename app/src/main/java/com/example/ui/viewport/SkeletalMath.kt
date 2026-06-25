@@ -2,7 +2,14 @@ package com.example.ui.viewport
 
 import kotlin.math.cos
 import kotlin.math.sin
+import kotlin.math.pow
+import kotlin.math.sqrt
+import kotlin.math.log
+import kotlin.math.tan
+import kotlin.math.acos
+import kotlin.math.asin
 import com.example.data.UserProfile
+
 
 data class Vector3D(val x: Float, val y: Float, val z: Float) {
     fun rotateY(angleRad: Float): Vector3D {
@@ -34,6 +41,122 @@ data class Vector3D(val x: Float, val y: Float, val z: Float) {
     }
 }
 
+// Skin tone extraction and adaptation functions
+fun extractSkinToneComponents(primaryColorInt: Int): SkinToneComponents {
+    val red = (primaryColorInt shr 16) and 0xFF
+    val green = (primaryColorInt shr 8) and 0xFF
+    val blue = primaryColorInt and 0xFF
+
+    // Convert to HSV for better skin tone analysis
+    val (h, s, v) = rgbToHsv(red, green, blue)
+
+    // Extract skin tone characteristics
+    val lightness = v
+    val saturation = s
+    val hue = h
+
+    // Calculate skin tone adjustments
+    val warmth = calculateWarmth(hue, lightness)
+    val depth = calculateDepth(blue, lightness)
+    val undertones = determineUndertones(hue)
+
+    return SkinToneComponents(
+        hue = hue,
+        saturation = saturation,
+        value = lightness,
+        warmth = warmth,
+        depth = depth,
+        undertones = undertones
+    )
+}
+
+fun rgbToHsv(r: Int, g: Int, b: Int): Triple<Float, Float, Float> {
+    val rf = r / 255f
+    val gf = g / 255f
+    val bf = b / 255f
+
+    val max = maxOf(rf, gf, bf)
+    val min = minOf(rf, gf, bf)
+    val delta = max - min
+
+    val h = when (delta) {
+        0f -> 0f
+        else -> {
+            when (max) {
+                rf -> ((gf - bf) / delta) % 6f
+                gf -> ((bf - rf) / delta) + 2f
+                else -> ((rf - gf) / delta) + 4f
+            } * 60f
+        }
+    }
+
+    val s = if (max == 0f) 0f else (delta / max)
+    val v = max
+
+    return Triple(h, s, v)
+}
+
+fun calculateWarmth(hue: Float, value: Float): Float {
+    // Warm tones are in the yellow/orange range (20-40 degrees)
+    val warmthRange = when (hue) {
+        in 20f..40f -> 1f
+        in 10f..20f -> 0.8f
+        in 40f..60f -> 0.5f
+        in 0f..10f -> 0.3f
+        in 280f..360f -> 0.4f
+        else -> 0.2f
+    }
+    return warmthRange * (value / 255f)
+}
+
+fun calculateDepth(blue: Int, value: Float): Float {
+    // Deeper skin has more blue component and higher value
+    val blueFactor = blue.toFloat() / 255f
+    val depth = (blueFactor * 0.6f) + (value / 255f * 0.4f)
+    return depth.coerceIn(0f, 1f)
+}
+
+fun determineUndertones(hue: Float): String {
+    return when (hue) {
+        in 0f..30f -> "cool"
+        in 30f..90f -> "neutral"
+        in 90f..150f -> "warm"
+        in 150f..210f -> "neutral"
+        in 210f..270f -> "cool"
+        else -> "neutral"
+    }
+}
+
+fun interpolateBodyColor(baseColor: Int, garmentType: String): Int {
+    val baseRed = (baseColor shr 16) and 0xFF
+    val baseGreen = (baseColor shr 8) and 0xFF
+    val baseBlue = baseColor and 0xFF
+
+    val hue = atan2(baseBlue.toFloat() - baseGreen.toFloat(), baseRed.toFloat() - baseGreen.toFloat()) * 180f / PI.toFloat()
+
+    val adjustmentFactor = when (garmentType.lowercase()) {
+        "jacket", "t-shirt", "shirt" -> 0.1f
+        "jeans", "trousers", "pants" -> 0.2f
+        "dress" -> 0.15f
+        else -> 0.1f
+    }
+
+    val newRed = (baseRed * (1 - adjustmentFactor) + 255 * adjustmentFactor).toInt().coerceIn(0, 255)
+    val newGreen = (baseGreen * (1 - adjustmentFactor) + 220 * adjustmentFactor).toInt().coerceIn(0, 255)
+    val newBlue = (baseBlue * (1 - adjustmentFactor) + 200 * adjustmentFactor).toInt().coerceIn(0, 255)
+
+    return AndroidColor.rgb(newRed, newGreen, newBlue)
+}
+
+// Skin tone components data class
+data class SkinToneComponents(
+    val hue: Float,
+    val saturation: Float,
+    val value: Float,
+    val warmth: Float,
+    val depth: Float,
+    val undertones: String
+)
 data class Polygon3D(
     val vertices: List<Vector3D>,
     val color: Int, // Hex ARGB color
